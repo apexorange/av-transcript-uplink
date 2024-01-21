@@ -1,10 +1,15 @@
 import re
+import os
 import sys
 import fitz  # PyMuPDF Do not import fitz library
-
+import json
 import anvil.server
 
-anvil.server.connect()
+with open('config.json', 'r') as config_file:
+    config = json.load(config_file)
+    anvil_uplink_key = config['ANVIL_UPLINK_KEY']
+
+anvil.server.connect(anvil_uplink_key)
 
 # hide_names = True
 # hide_objections = True
@@ -31,18 +36,45 @@ def setup_variables():
 
 
 
-@anvil.server.callable()
-def process_pdf(file):
-    # Create a PDF object from the uploaded file content
-    pdf_bytes = file.get_bytes()
-    pdf = fitz.open(stream=pdf_bytes, filetype="pdf")
+@anvil.server.callable
+def process_pdf_locally(file):
+    # Here, 'file' is the Media object sent from Anvil
+    # You can read its content and process it as needed
+    with open("temp_pdf.pdf", "wb") as f:
+        f.write(file.get_bytes())
 
-    if file:
-        # Call the function to extract highlighted text and populate the left text field
-        text_display = extract_highlighted_text_with_coordinates(file)
-        pdf.close()
-
+    with open("temp_pdf.pdf", "rb") as f:
+        text_display = extract_highlighted_text_with_coordinates(f)
         return "".join(text_display)
+
+
+@anvil.server.callable
+def process_pdf(file):
+    # This function will be called from the client code with the uploaded file
+    # Now, send this file to the local script
+    print(f"File name: {file.name}")
+    print(f"Content type: {file.content_type}")
+    # Get the file content
+    file_content = file.get_bytes()
+
+    # Check the size of the file content
+    print(f"File size: {len(file_content)} bytes")
+    return anvil.server.call('process_pdf_locally', file)
+
+
+@anvil.server.callable
+def delete_temp_file(file_path):
+    if os.path.exists(file_path):
+        os.remove(file_path)
+        return "File deleted successfully"
+    else:
+        return "File does not exist"
+# @anvil.server.callable()
+# def process_pdf_content(file):
+#     if file:
+#         # Call the function to extract highlighted text and populate the left text field
+#         text_display = extract_highlighted_text_with_coordinates(file)
+#         return "".join(text_display)
 
 
 def extract_highlighted_text_with_coordinates(file: object) -> object:
