@@ -1,2 +1,3 @@
-config.json
-config4.json
+working/config.json
+config/config4.json
+/config/
