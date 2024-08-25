@@ -11,4 +11,4 @@ COPY . /app
 RUN pip install --no-cache-dir -r requirements.txt
 
 # Run the Python script when the container launches
-CMD ["python", "transcript_utility_uplink_4.py"]
+CMD ["python", "transcript_utility_uplink_beta.py"]

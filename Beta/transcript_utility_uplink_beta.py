@@ -20,7 +20,8 @@ def sort_key(s):
 
 @anvil.server.callable()
 def setup_variables():
-    build_number = 7710
+    version_number = "0.0.3"
+    build_number = "7713"
     # known_issues_lst = ("Known Issues",
     #                     "- Segments that span multiple pages are not yet supported for designation lists",
     #                     "- Items imported",
@@ -145,15 +146,20 @@ def process_pdf_highlighted_text(page_num, text):
 @anvil.server.callable()
 def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
                                 detect_pages_checkbox_state, witness_name_checkbox_state, witness_name_text):
+    print(text)
+    text = text.replace('·', ' ')
     lines = text.split('\n')  # split lines into a list based on hard returns
     first_num = None  # set up variables to keep track of line number range
     last_num = None  # set up variables to keep track of line number range
 
-    qa_phrases = ["Q.", "A."]  # phrases or words that will impact when line breaks occur - Qs and As
-    objection_phrases = ["MR", "MRS", "MS", "ATTY",
-                         "ATTORNEY"]  # phrases or words that affect capitalization and are flagged for removal
+    qa_phrases = ["Q.", "A.", "Q ", "A ", "Q: ", "A: "]  # phrases or words that will impact when line breaks occur -
+    # Qs
+    # and As
+    objection_phrases = ["MR ", "MRS ", "MS ", "ATTY ",
+                         "ATTORNEY ", "MR. ", "MRS. ", "MS. ",
+                         "ATTY. "]  # phrases or words that affect capitalization and are flagged for removal
     non_party_phrases = [
-        "THE VIDEOGRAPHER"]  # phrases or words that are not objections that affect caps for removal
+        "THE VIDEOGRAPHER", "THE COURT"]  # phrases or words that are not objections that affect caps for removal
     completed_line_groups = []  # Used to create larger lines that are combined based on common attributes (all
     # part of an objection, etc)
     phrase_being_assembled = ""
@@ -183,18 +189,23 @@ def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
         # or more digits followed by any number of whitespace characters, including none
 
         if not detect_pages:
-            match = re.match(r'^\d+(:\s*\d+)?\s+', line)
-            print(f'tt_mode: {match}')
+            # match = re.match(r'^\d+(:\s*\d+)?\s+', line)
+            match = re.match(r'^\d+(:\d+)*(:|\.|)', line)
 
             if match:
+                print(f'not_detect_mode: {match}')
                 num = match.group(1)
                 line = line[match.end():].lstrip()
         else:
-            match = re.match(r'^(\d+)\s+', line)
-            print(match)
+            match = re.match(r'^\d+(:\d+)*(:|\.|)', line)
 
             if match:
-                num = int(match.group(1))
+                print(f'detect_mode: {match}')
+                num = match.group(1)
+                if num is not None and num.isdigit():
+                    num = int(num)
+                else:
+                    num = num
 
                 if first_num is None:
                     first_num = num
@@ -222,7 +233,12 @@ def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
             # Add first two characters, then add tab, then strip any white space on the left
             # of the remaining phrase, then add the remaining phrase
 
-            phrase_being_assembled = "\n" + line[:2] + "\t" + line[2:].lstrip()
+            if line[1] == " ":
+                modified_second_char = "."
+            else:
+                modified_second_char = line[1]
+
+            phrase_being_assembled = "\n" + line[0] + modified_second_char + "\t" + line[2:].lstrip()
 
             # Do not capitalize because these are Q and A phrases and need to be shown.
             capitalize = False

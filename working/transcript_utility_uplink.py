@@ -5,7 +5,7 @@ import fitz  # PyMuPDF Do not import fitz library
 import json
 import anvil.server
 
-with open('config.json', 'r') as config_file:
+with open('../config.json', 'r') as config_file:
     config = json.load(config_file)
     anvil_uplink_key = config['ANVIL_UPLINK_KEY']
 

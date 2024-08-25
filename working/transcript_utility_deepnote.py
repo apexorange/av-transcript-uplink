@@ -2,8 +2,8 @@ import re
 
 """ VARIABLES """
 
-lines_to_hide: list = ["<OBJ>", "<OTHER>", "<NAME>"]
-detect_pages = True
+cap_strings_lst = ["<OBJ>", "<OTHER>", "<NAME>"]
+detect_pages = False
 witness_name = "Helt"
 num_range = []
 
@@ -12,17 +12,19 @@ num_range = []
 original_line_lst: list = [
     "7 Q. Why you such shit?",
     "8 A. There were a lot of documents. I don't",
-    "9 remember any specific document. There were lots.",
+    "9: remember any specific document. There were lots.",
     "10 BY MR. HOLLANDER:",
-    "11 Q. Can you describe the categories of",
+    "11: Q. Can you describe the categories of",
     "12 documents that you reviewed?",
-    "13 MR. DORSKY: Same caution, same",
-    "14 objection.",
+    "13: MR. DORSKY: Same caution, same",
+    "14. objection.",
     "15 A. No, I really don't remember.",
     "16 BY MR. HOLLANDER:",
     "17 Q. Do you have any documents or notes with",
     "18 you today?",
-    "19 A. No, I do not."
+    "19: A. No, I do not.",
+    "344:12 Q. Do you like cows?",
+    "344:13 A. Yes I do."
 ]
 
 """ FUNCTIONS """
@@ -43,17 +45,16 @@ def set_pattern_match(text_str: str) -> tuple:
     first_num = None  # set up variables to keep track of line number range
     last_num = None  # set up variables to keep track of line number range
 
-    if not detect_pages:  # format for non-standard transcripts
-        match = re.match(r"^\d+(:\s*\d+)?\s+", text_str)
-        if match:
-            num = match.group(1)
-            text_str = text_str[match.end():].lstrip()
-    else:  # format for standard deposition transcripts with each content page being 1-25 lines
-        match = re.match(r"^(\d+)\s+", text_str)
-        if match:
-            num = int(match.group(1))
-            text_str = text_str[match.end():].lstrip()  # remove spaces on the left of text string
-            num_range.append(num)
+    non_depo_transcript_match = re.match(r"^\d+:\d+", text_str)
+    if non_depo_transcript_match is not None:
+        non_depo_num = non_depo_transcript_match.group(0).split(":")
+        non_depo_text_str = text_str[non_depo_transcript_match.end():].lstrip()
+        print(non_depo_num, non_depo_text_str)
+
+    match = re.match(r"^\d+(:\d+)*(:|\.|)", text_str)
+    if match:
+        num = match.group(0)
+        text_str = text_str[match.end():].lstrip()
     return text_str, num_range
 
 
@@ -105,7 +106,6 @@ def assemble_lines(tagged_lines: list) -> list:
     This ensures all `False` lines are included with the preceding `True` line.
     """
 
-    cap_strings_lst = ["<OBJ>", "<OTHER>", "<NAME>"]
     assembled_lines = []
     for i, e in enumerate(tagged_lines):
         if tagged_lines[i][2]:
@@ -123,7 +123,10 @@ def assemble_lines(tagged_lines: list) -> list:
                     output += " " + tagged_lines[i][0].upper()
                     i += 1
                 assembled_lines.append(output)
+
+    print(assembled_lines)
     return assembled_lines
+
 
 
 def hide_line_types(lines: list, hide_lst: list) -> list:
@@ -148,8 +151,8 @@ def calculate_line_numbers():
 
 
 def final_formatting(lines: list) -> str:
-    first_num = calculate_line_numbers()[0]
-    last_num = calculate_line_numbers()[1]
+    first_num = 1 # calculate_line_numbers()[0]
+    last_num = 25 # calculate_line_numbers()[1]
     formatted_lines = []
     for line in lines:
         if line.startswith("Q. "):
@@ -169,7 +172,7 @@ def final_formatting(lines: list) -> str:
 def process_all() -> str:
     output: list = initial_transcript_intake(original_line_lst)
     output: list = assemble_lines(output)
-    output: list = hide_line_types(output, lines_to_hide)
+    output: list = hide_line_types(output, cap_strings_lst)
     output: str = final_formatting(output)
     return output
 

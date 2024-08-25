@@ -76,5 +76,5 @@ def detect_overlaps(pdf_path):
 
 
 # Example usage
-pdf_path = 'Textmap_Clip_Report.pdf'
+pdf_path = 'demo1.pdf'
 detect_overlaps(pdf_path)
