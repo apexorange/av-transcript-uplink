@@ -4,12 +4,37 @@ import sys
 import fitz  # PyMuPDF Do not import fitz library
 import json
 import anvil.server
+from dotenv import load_dotenv
 
-with open('../config/config.json', 'r') as config_file:
-    config = json.load(config_file)
-    anvil_uplink_key = config['ANVIL_UPLINK_KEY']
+# Step 1: Identify if the environment is Docker
+is_docker = os.path.exists('/.dockerenv')
+live_server = is_docker  # Use the Docker environment as the live server indicator
 
-anvil.server.connect(anvil_uplink_key)
+# Step 2: Load the appropriate .env file
+if is_docker:
+    load_dotenv(".env")  # Load production environment variables
+    auth_file_path = "/run/secrets/auth_file"  # Docker secrets location
+else:
+    load_dotenv(".env.local")  # Load local development environment variables
+    auth_file_path = os.path.join("config", "auth.json")  # Local path to auth file
+
+# Step 3: Handle missing configurations
+if not auth_file_path or not os.path.exists(auth_file_path):
+    raise FileNotFoundError(
+        f"Authentication file not found at {auth_file_path}. Ensure it exists in the expected location."
+    )
+
+# Step 4: Load the authentication key file
+with open(auth_file_path, 'r') as f:
+    key = json.load(f)
+
+# Step 5: Determine the uplink key
+uplink_key = key.get("ANVIL_UPLINK_KEY" if live_server else "ANVIL_TEST_KEY")
+if not uplink_key:
+    raise ValueError("Uplink key not found in the authentication file.")
+
+# Step 6: Connect to the Anvil server
+anvil.server.connect(uplink_key)
 
 
 def sort_key(s):
@@ -20,8 +45,8 @@ def sort_key(s):
 
 @anvil.server.callable()
 def setup_variables():
-    version_number = "0.0.3"
-    build_number = "7713"
+    version_number = "0.0.5"
+    build_number = "7714"
     # known_issues_lst = ("Known Issues",
     #                     "- Segments that span multiple pages are not yet supported for designation lists",
     #                     "- Items imported",
@@ -148,6 +173,7 @@ def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
                                 detect_pages_checkbox_state, witness_name_checkbox_state, witness_name_text):
     print(text)
     # Replace all middle dots '·' with spaces
+    text = text.replace('·', ' ')
     lines = text.split('\n')  # split lines into a list based on hard returns
     first_num = None  # set up variables to keep track of line number range
     last_num = None  # set up variables to keep track of line number range
@@ -295,6 +321,104 @@ def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
             processed_text += '\n\n{} Tr. Pg. __, Ln. {}-{}'.format(witness_name_text, first_num, last_num)  # name,
 
     return processed_text
+
+
+## CHATGPT ##
+# def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
+#                                 detect_pages_checkbox_state, witness_name_checkbox_state, witness_name_text):
+#     """
+#     Processes transcript text to prepare it for PowerPoint output.
+#     """
+# 
+#     def clean_line(line):
+#         """Cleans and replaces special characters in a line."""
+#         line = line.strip().replace('·', ' ')
+#         for word, replacement in swap_phrase_dict.items():
+#             line = line.replace(word, replacement)
+#         return remove_timestamps(line)
+# 
+#     def remove_timestamps(line):
+#         """Removes timestamps in the format XX:XX:XX from the end of the line."""
+#         return re.sub(r'\b\d{2}:\d{2}:\d{2}$', '', line).strip()
+# 
+#     def process_line_groups(phrase, capitalize_flag):
+#         """Adds a processed phrase to the completed groups, with optional capitalization."""
+#         if phrase:
+#             return phrase.upper() if capitalize_flag else phrase
+#         return None
+# 
+#     detect_pages = detect_pages_checkbox_state
+# 
+#     # Configuration and state variables
+#     qa_phrases = ["Q.", "A.", "Q ", "A ", "Q: ", "A: "]
+#     objection_phrases = ["MR ", "MRS ", "MS ", "ATTY ", "ATTORNEY ", "MR. ", "MRS. ", "MS. ", "ATTY. "]
+#     non_party_phrases = ["THE VIDEOGRAPHER", "THE COURT"]
+#     swap_phrase_dict = {"THE WITNESS:": "A."}
+#     completed_line_groups = []
+#     capitalize = False
+#     phrase_being_assembled = ""
+# 
+#     # Page and line number tracking
+#     first_num = None
+#     last_num = None
+# 
+#     # Process each line
+#     for i, line in enumerate(text.split('\n')):
+#         line = clean_line(line)
+# 
+#         # Handle page number detection
+#         if detect_pages:
+#             match = re.match(r'^(\d+)\s+', line)
+#             if match:
+#                 num = int(match.group(1))
+#                 if first_num is None:
+#                     first_num = num
+#                 last_num = num
+#                 line = line[match.end():].strip()
+#         else:
+#             match = re.match(r'^\d+(:\s*\d+)?\s+', line)
+#             if match:
+#                 line = line[match.end():].strip()
+# 
+#         # Skip lines based on checkbox states
+#         if name_checkbox_state and line.startswith(("QUESTIONS BY", "BY")) and ":" in line:
+#             continue
+# 
+#         # Process lines starting with specific phrases
+#         if any(line.startswith(phrase) for phrase in qa_phrases):
+#             if phrase_being_assembled:
+#                 completed_line_groups.append(process_line_groups(phrase_being_assembled, capitalize))
+#             phrase_being_assembled = f"\n{line[:2]}\t{line[2:].strip()}"
+#             capitalize = False
+# 
+#         elif any(line.startswith(phrase) for phrase in objection_phrases + non_party_phrases):
+#             if phrase_being_assembled:
+#                 completed_line_groups.append(process_line_groups(phrase_being_assembled, capitalize))
+#             phrase_being_assembled = f"\n{line}"
+#             capitalize = True
+# 
+#         else:
+#             if line and not capitalize:
+#                 if phrase_being_assembled:
+#                     phrase_being_assembled += " "
+#                 phrase_being_assembled += line
+# 
+#     # Add the final assembled phrase
+#     if phrase_being_assembled:
+#         completed_line_groups.append(process_line_groups(phrase_being_assembled, capitalize))
+# 
+#     # Remove objection lines if checkbox is checked
+#     if obj_checkbox_state:
+#         completed_line_groups = [line for line in completed_line_groups if not line.isupper()]
+# 
+#     # Combine processed lines
+#     processed_text = ''.join(completed_line_groups).strip()
+# 
+#     # Append witness name and page/line range if applicable
+#     if witness_name_checkbox_state and first_num is not None and last_num is not None:
+#         processed_text += f'\n\n{witness_name_text} Tr. Pg. __, Ln. {first_num}-{last_num}'
+# 
+#     return processed_text
 
 
 @anvil.server.callable()

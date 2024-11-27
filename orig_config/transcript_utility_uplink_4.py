@@ -4,11 +4,10 @@ import sys
 import fitz  # PyMuPDF Do not import fitz library
 import json
 import anvil.server
+from dotenv import load_dotenv
 
 # docker build --no-cache -t transcript-av-app:latest .
-# docker run --name transcript-av-app-01 -d -v /home/apexdesign/transcript_av/config4.json:/app/config/config4.json transcript-av-app
-
-from dotenv import load_dotenv
+# docker run --name transcript-av-app-01 -d -v /mnt/disk1/apexdata/projects/transcript_av/config/config4.json:/app/config/config4.json transcript-av-app
 
 # Set the path for the service account file from Docker secrets or environment variable
 CONFIG_PATH = '/app/config/config4.json'

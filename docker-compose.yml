@@ -1,0 +1,15 @@
+version: '3.8'
+
+services:
+  anvil-app:
+    build: .
+    env_file:
+      - .env
+    volumes:
+      - ./config:/app/config
+    secrets:
+      - auth_secret
+
+secrets:
+  auth_secret:
+    file: ./config/auth.json

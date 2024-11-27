@@ -1,0 +1,10 @@
+.env
+.env.local
+config/auth.json  # Or any other sensitive files
+config/
+working/
+beta/
+orig_config
+*.pyc
+__pycache__/
+.venv/
