@@ -171,31 +171,79 @@ def process_pdf_highlighted_text(page_num, text):
 @anvil.server.callable()
 def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
                                 detect_pages_checkbox_state, witness_name_checkbox_state, witness_name_text):
+
+    """
+    Processes transcript text to prepare it for PowerPoint output.
+    """
+    def clean_line(line):
+        """Cleans and replaces special characters in a line."""
+        # Strip whitespace and replace middle dots
+        line = line.strip().replace('·', ' ')
+
+        # Replace specific phrases using the swap dictionary
+        for word, replacement in swap_phrase_dict.items():
+            line = line.replace(word, replacement)
+
+        # Remove timestamps at the end of the line
+        line = remove_timestamps(line)
+
+        # Handle lines starting with special characters
+        if line and not line[0].isalnum() and not any(
+                line.startswith(phrase) for phrase in qa_phrases + objection_phrases + non_party_phrases):
+            line = re.sub(r'^[^\w\s]', '', line)
+
+        # Handle lines that start with "Pg. "
+        if line.startswith("Pg. "):
+            line = "\n\n" + line
+
+        return line
+
+    def remove_timestamps(line):
+        """Removes timestamps in the format XX:XX:XX from the end of the line."""
+        return re.sub(r'[\s\t]*\b\d{2}:\d{2}:\d{2}$', '', line).strip()
+
+
+    def process_line_groups(phrase, capitalize_flag):
+        """Adds a processed phrase to the completed groups, with optional capitalization."""
+        if phrase:
+            return phrase.upper() if capitalize_flag else phrase
+        return None
+
+    # Configuration and state variables
+    qa_phrases = ["Q.", "A.", "Q ", "A ", "Q: ", "A: "]
+    objection_phrases = ["MR ", "MRS ", "MS ", "ATTY ", "ATTORNEY ", "MR. ", "MRS. ", "MS. ", "ATTY. "]
+    non_party_phrases = ["THE VIDEOGRAPHER", "THE COURT"]
+    swap_phrase_dict = {"THE WITNESS:": "A."}
+    completed_line_groups = []
+    capitalize = False
+    phrase_being_assembled = ""
+    
+    
     print(text)
     # Replace all middle dots '·' with spaces
-    text = text.replace('·', ' ')
+    # text = text.replace('·', ' ')
     lines = text.split('\n')  # split lines into a list based on hard returns
     first_num = None  # set up variables to keep track of line number range
     last_num = None  # set up variables to keep track of line number range
 
-    qa_phrases = ["Q.", "A.", "Q ", "A ", "Q: ", "A: "]  # phrases or words that will impact when line breaks occur -
+    # qa_phrases = ["Q.", "A.", "Q ", "A ", "Q: ", "A: "]  # phrases or words that will impact when line breaks occur -
     # Qs
     # and As
-    objection_phrases = ["MR ", "MRS ", "MS ", "ATTY ",
-                         "ATTORNEY ", "MR. ", "MRS. ", "MS. ",
-                         "ATTY. "]  # phrases or words that affect capitalization and are flagged for removal
-    non_party_phrases = [
-        "THE VIDEOGRAPHER", "THE COURT"]  # phrases or words that are not objections that affect caps for removal
-    completed_line_groups = []  # Used to create larger lines that are combined based on common attributes (all
+    # objection_phrases = ["MR ", "MRS ", "MS ", "ATTY ",
+    #                      "ATTORNEY ", "MR. ", "MRS. ", "MS. ",
+    #                      "ATTY. "]  # phrases or words that affect capitalization and are flagged for removal
+    # non_party_phrases = [
+    #     "THE VIDEOGRAPHER", "THE COURT"]  # phrases or words that are not objections that affect caps for removal
+    # completed_line_groups = []  # Used to create larger lines that are combined based on common attributes (all
     # part of an objection, etc)
-    phrase_being_assembled = ""
-    capitalize = False
-    swap_phrase_dict = {"THE WITNESS:": "A."}
+    # phrase_being_assembled = ""
+    # capitalize = False
+    # swap_phrase_dict = {"THE WITNESS:": "A."}
 
-    hide_names = name_checkbox_state
-    hide_objections = obj_checkbox_state
-    show_witness_names = witness_name_checkbox_state
-    detect_pages = detect_pages_checkbox_state
+    # hide_names = name_checkbox_state
+    # hide_objections = obj_checkbox_state
+    # show_witness_names = witness_name_checkbox_state
+    # detect_pages = detect_pages_checkbox_state
 
     # We will be going through line by line to perform various steps. The key to understanding this
     # code is to understand when and why lines get combined and added. And everything that happens in this
@@ -203,122 +251,61 @@ def prepare_text_for_powerpoint(text, name_checkbox_state, obj_checkbox_state,
 
     # for-loop to go through each current line - which at this stage includes any original line breaks.
 
-    for i, line in enumerate(lines):
-        line = line.strip()  # Strips any white-space at the beginning or end of a line
+    # Process each line
+    for i, line in enumerate(text.split('\n')):
+        line = clean_line(line)
 
-        # Perform word replacements
-        for word, replacement in swap_phrase_dict.items():
-            if word in line:
-                line = line.replace(word, replacement)
-
-        # Handle lines that start with special characters
-        if line and not line[0].isalnum() and not any(
-                line.startswith(phrase) for phrase in qa_phrases + objection_phrases + non_party_phrases):
-            line = re.sub(r'^[^\w\s]', '', line)
-
-        # create match variable for a line that detects a sequence of one
-        # or more digits followed by any number of whitespace characters, including none
-
-        if not detect_pages:
-            match = re.match(r'^\d+(:\s*\d+)?\s+', line)
-            # match = re.match(r'^\d+(:\d+)*(:|\.|)', line)
-            print(f'tt_mode: {match}')
-
-            if match:
-                num = match.group(1)
-                line = line[match.end():].lstrip()
-        else:
+        # Handle page number detection
+        if detect_pages_checkbox_state:
             match = re.match(r'^(\d+)\s+', line)
-            print(match)
-
             if match:
                 num = int(match.group(1))
-
                 if first_num is None:
                     first_num = num
-                last_num = num  # Always update last_num with the latest number
+                last_num = num
+                line = line[match.end():].strip()
+        else:
+            match = re.match(r'^\d+(:\s*\d+)?\s+', line)
+            if match:
+                line = line[match.end():].strip()
 
-                line = line[match.end():].lstrip()
-
-        if hide_names and line.startswith("QUESTIONS BY") and ":" in line:
+        # Skip lines based on checkbox states
+        if name_checkbox_state and line.startswith(("QUESTIONS BY", "BY")) and ":" in line:
             continue
-        elif hide_names and line.startswith("BY") and ":" in line:
-            continue
 
-        if line.startswith("Pg. "):
-            line = "\n\n" + line
-
-        ##############################
-        # If the line starts with a Q. or A., and if it is not capitalized or flagged by "hide objections"
-        # append the current_line to phrases being assembled on a new line and remove any extraneous spaces
-
+        # Process lines starting with specific phrases
         if any(line.startswith(phrase) for phrase in qa_phrases):
-            if phrase_being_assembled and not (capitalize and hide_objections):
-                completed_line_groups.append(
-                    phrase_being_assembled.upper() if capitalize else phrase_being_assembled)
-
-            # Add first two characters, then add tab, then strip any white space on the left
-            # of the remaining phrase, then add the remaining phrase
-
-            if line[1] == " ":
-                modified_second_char = "."
-            else:
-                modified_second_char = line[1]
-
-            phrase_being_assembled = "\n" + line[0] + modified_second_char + "\t" + line[2:].lstrip()
-
-            # Do not capitalize because these are Q and A phrases and need to be shown.
+            if phrase_being_assembled:
+                completed_line_groups.append(process_line_groups(phrase_being_assembled, capitalize))
+            phrase_being_assembled = f"\n{line[:2]}\t{line[2:].strip()}"
             capitalize = False
 
-        ##############################
-        # If the line starts with one of the objection phrases, append the current_line to
-        # phrases being assembled and capitalize it, if not just append it as is
-
-        elif any(line.startswith(phrase) for phrase in objection_phrases):
-            if phrase_being_assembled and not (capitalize and hide_objections):
-                completed_line_groups.append(
-                    phrase_being_assembled.upper() if capitalize else phrase_being_assembled)
-            phrase_being_assembled = "\n" + line
+        elif any(line.startswith(phrase) for phrase in objection_phrases + non_party_phrases):
+            if phrase_being_assembled:
+                completed_line_groups.append(process_line_groups(phrase_being_assembled, capitalize))
+            phrase_being_assembled = f"\n{line}"
             capitalize = True
-
-        ##############################
-        # If the line starts with one of the non-party phrases, append the current_line to
-        # phrases being assembled and capitalize it, if not just append it as is
-
-        elif any(line.startswith(phrase) for phrase in non_party_phrases):
-            if phrase_being_assembled and not (capitalize and hide_objections):
-                completed_line_groups.append(
-                    phrase_being_assembled.upper() if capitalize else phrase_being_assembled)
-            phrase_being_assembled = "\n" + line
-            capitalize = True
-
-        ##############################
-        # Else, any other line that is not flagged as capitalized or hide_objections, and if it is not starting
-        # with one of the Q or A phrases, then add a space so it connects to the previous line, and then add the
-        # line
-        # to phrase being assembled
 
         else:
-            if line and not capitalize:  # and hide_objections):
-                if phrase_being_assembled and not any(line.startswith(phrase) for phrase in qa_phrases):
+            if line and not capitalize:
+                if phrase_being_assembled:
                     phrase_being_assembled += " "
                 phrase_being_assembled += line
 
+    # Add the final assembled phrase
     if phrase_being_assembled:
-        completed_line_groups.append(phrase_being_assembled.upper() if capitalize else phrase_being_assembled)
-        for line in completed_line_groups:
-            if line.isupper() and hide_objections:
-                completed_line_groups.remove(line)
+        completed_line_groups.append(process_line_groups(phrase_being_assembled, capitalize))
 
+    # Remove objection lines if checkbox is checked
+    if obj_checkbox_state:
+        completed_line_groups = [line for line in completed_line_groups if not line.isupper()]
+
+    # Combine processed lines
     processed_text = ''.join(completed_line_groups).strip()
 
-    # Fetch the name from the name field
-    # name = self.name_edit.text()
-
-    # Append the line number range with the name if detected
-    if show_witness_names:
-        if first_num is not None and last_num is not None:
-            processed_text += '\n\n{} Tr. Pg. __, Ln. {}-{}'.format(witness_name_text, first_num, last_num)  # name,
+    # Append witness name and page/line range if applicable
+    if witness_name_checkbox_state and first_num is not None and last_num is not None:
+        processed_text += f'\n\n{witness_name_text} Tr. Pg. __, Ln. {first_num}-{last_num}'
 
     return processed_text
 
